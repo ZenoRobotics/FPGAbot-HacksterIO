@@ -1,3 +1,7 @@
+![IMG_2531](https://github.com/user-attachments/assets/0ff7d709-3cea-4153-bb94-2886c818ec6e)
+
+
+
 ## FPGAbot-HacksterIO
 
 The FPGA code included here goes with the project writeup I published on Hackster.io at:
