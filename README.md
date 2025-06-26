@@ -12,6 +12,12 @@ Step by step instructions on how to create this project in AMD Vivado is in the 
 
 ### Full Parts List
 
+I will be modifying the list below such that you can actually access the links. Here are a few main ones:
+
+1. Adiuvo Spartan-7 and RP2040 board link: https://www.adiuvoengineering.com/product-page/leonidas-spartan-7-rpi-2040
+2. DC12V Encoder Gear Motor with Mounting Bracket, 65mm, 130RPM.  https://www.amazon.com/gp/product/B07X7M1LLQ/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1 
+
+#### List Image
 ![image](https://github.com/user-attachments/assets/c6400059-fee9-4fbf-9c33-fba25a968638)
 
 
