@@ -25,5 +25,12 @@ I will be modifying the list below such that you can actually access the links. 
 
 These files can be found above. 
 
-Power Switch Casing: Housing_for_switch.stl \
+Power Switch Casing: Housing_for_switch.stl 
+
+![image](https://github.com/user-attachments/assets/cc1e2b9c-98e1-4752-84a4-e1e050aeec49)
+
+
 RC Enable Switch: RockerSwitchPanel.stl
+
+![image](https://github.com/user-attachments/assets/3687e580-df8b-4835-9344-4f2aa6908bc8)
+
