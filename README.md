@@ -35,6 +35,6 @@ Power Switch Casing: Housing_for_switch.stl
 RC Enable Switch: RockerSwitchPanel.stl
 
 ![image](https://github.com/user-attachments/assets/3687e580-df8b-4835-9344-4f2aa6908bc8)
-![IMG_2753](https://github.com/user-attachments/assets/acf424b3-099d-433b-b3d8-4d15eb489730)
+<img src="https://github.com/user-attachments/assets/acf424b3-099d-433b-b3d8-4d15eb489730" width="450" height="350">
 
 
