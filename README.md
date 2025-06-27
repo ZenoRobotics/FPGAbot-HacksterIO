@@ -21,3 +21,9 @@ I will be modifying the list below such that you can actually access the links. 
 ![image](https://github.com/user-attachments/assets/c6400059-fee9-4fbf-9c33-fba25a968638)
 
 
+### 3D Printer STL Files
+
+These files can be found above. 
+
+Power Switch Casing: Housing_for_switch.stl \
+RC Enable Switch: RockerSwitchPanel.stl
