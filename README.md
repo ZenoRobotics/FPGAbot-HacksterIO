@@ -28,9 +28,13 @@ These files can be found above.
 Power Switch Casing: Housing_for_switch.stl 
 
 ![image](https://github.com/user-attachments/assets/cc1e2b9c-98e1-4752-84a4-e1e050aeec49)
+![image](https://github.com/user-attachments/assets/6a7bb3ac-2057-4279-aa91-c601d0919d64)
+![image](https://github.com/user-attachments/assets/7ffc5f40-e094-4ca0-9255-a6f886df1226)
 
 
 RC Enable Switch: RockerSwitchPanel.stl
 
 ![image](https://github.com/user-attachments/assets/3687e580-df8b-4835-9344-4f2aa6908bc8)
+![IMG_2753](https://github.com/user-attachments/assets/acf424b3-099d-433b-b3d8-4d15eb489730)
+
 
