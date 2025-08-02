@@ -96,7 +96,7 @@ module top(
     wire         zero_encoders_w;
 
     //---------  rx-tx related signals and parameters
-    parameter c_CLKS_PER_BIT   = 2604; //868; //100 MHz(clks/sec)/ 38400 bits/sec = 2604
+    parameter c_CLKS_PER_BIT   = 1736; // for 57600; //868; //868 for 115200 Baud //100 MHz(clks/sec)/ 38400 bits/sec = 2604
 	//for uart tx driver state machine
 	parameter  SEND_TX_DV    = 2'b00;
 	parameter  WAIT_TX_DONE  = 2'b01;
@@ -129,6 +129,30 @@ module top(
 	reg  [1:0] rx_in_delay_data_buf;
 	reg        r_rx_byte_cnt = 1'b0;
 	//-------------- rx-tx end ----------------
+	
+	//Debug Data TX SM related
+	// PID States
+    localparam IDLE           = 3'b000;
+    localparam LEFT_HDR_BYTE  = 3'b001;
+    localparam L_MID_BYTE     = 3'b010;
+    localparam L_LOW_BYTE     = 3'b011;
+    localparam RT_HDR_BYTE    = 3'b100;
+    localparam R_MID_BYTE     = 3'b101;
+    localparam R_LOW_BYTE     = 3'b110;
+    localparam TX_DATA_VAL    = 3'b111;
+    
+    reg [2:0]  curr_state, next_state = IDLE;
+    
+    reg [7:0]  fifo_tx_data_in  = 8'h00;
+    reg        fifo_tx_data_val = 1'b0;
+    
+    localparam L_ENC_HDR       = 8'hFD;
+    localparam R_ENC_HDR       = 8'hFE;
+    
+    reg [15:0] l_enc_lower_16_bits = 8'h00;
+    reg [15:0] r_enc_lower_16_bits = 8'h00;
+    
+    //-----------------------------------------
 	    
     wire pb_start_sample;
     wire sampleCntOnOff_w;
@@ -161,8 +185,8 @@ module top(
        reg  [6:0] curr_setpt2 = 7'h48;
        localparam sim_val = 1;
     `else
-       reg  [6:0] curr_setpt1 = 7'h40;
-       reg  [6:0] curr_setpt2 = 7'h40;
+       reg  [6:0] curr_setpt1 = 7'h54;
+       reg  [6:0] curr_setpt2 = 7'h54;
        localparam sim_val = 0;
     `endif
     ////////////////////////////////////////////////////////
@@ -179,6 +203,10 @@ module top(
     reg  delay_pulse_r = 1'b0;
     reg  delay_pulse_256k = 1'b0;
     reg  delay_pulse_256k_r = 1'b0;
+    wire pid_data_rdy_w;
+    wire w_Tx_DV;
+    wire w_Tx_fifo_empty;
+    wire w_tx_active;
     
     assign sample_mode_en = 1'b0; //temp
     assign stop = 1'b0;           //temp
@@ -188,7 +216,7 @@ module top(
     assign o_Tx_DV = r_Tx_DV;
 
     assign led = (rc_en == 1'b1) ?{rc_fwd,rc_rev,rc_lft,rc_rt} : 4'hf;
-    assign reset = ~rst_n;
+    assign reset = rst; //~rst_n;
     
     //PZ for simulation only
     //assign o_sim_pwm_master_clk = pwm_master_clk_w;
@@ -253,17 +281,104 @@ module top(
      .o_Rx_DV(w_Rx_DV),
      .o_Rx_Byte(w_Rx_Byte)
      );
-
+    */
+    
+    //debug data feed sm to uart tx fifo
+    always@(posedge pwm_master_clk_w or posedge reset) begin
+       if(reset == 1'b1) begin 
+         curr_state <= IDLE;
+         next_state <= IDLE;
+         fifo_tx_data_in  <= 8'h00;
+         fifo_tx_data_val <= 1'b0;
+         l_enc_lower_16_bits <= 8'h00;
+         r_enc_lower_16_bits <= 8'h00;
+       end
+       else begin
+         case(curr_state)
+           IDLE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   if (pid_data_rdy_w == 1'b1) begin
+                     curr_state <= LEFT_HDR_BYTE;
+                     l_enc_lower_16_bits  <= w_pos_enc_cnt_m1[15:0];
+                     r_enc_lower_16_bits  <= w_pos_enc_cnt_m2[15:0];
+                   end
+                 end
+           //send L-header byte + left encoder lower 16 bits
+           LEFT_HDR_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= L_ENC_HDR;
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= L_MID_BYTE;
+                end
+           L_MID_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= l_enc_lower_16_bits[15:8];
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= L_LOW_BYTE;
+                end
+           L_LOW_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= l_enc_lower_16_bits[7:0];
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= RT_HDR_BYTE;
+                end
+           //send R-header byte + right encoder lower 16 bits
+           RT_HDR_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= R_ENC_HDR;
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= R_MID_BYTE;
+                end
+           R_MID_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= r_enc_lower_16_bits[15:8];
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= R_LOW_BYTE;
+                end
+           R_LOW_BYTE: begin
+                   fifo_tx_data_val <= 1'b0;
+                   fifo_tx_data_in  <= r_enc_lower_16_bits[7:0];
+                   curr_state <= TX_DATA_VAL;
+                   next_state <= IDLE;
+                end
+           //-----
+           TX_DATA_VAL: begin
+                   if (w_Tx_Done == 1'b1) begin
+                      fifo_tx_data_val <= 1'b1;
+                      curr_state <= next_state;
+                   end
+                end
+          endcase 
+       end
+    end
+    
+    /*
+    fifo_uart uart_tx_fifo_inst
+    (
+     .rst(reset),
+     .wr_clk(pwm_master_clk_w),  //Master PWM clock: 256 kHz
+     .rd_clk(clk_100MHz),
+     .din(fifo_tx_data_in),
+     .wr_en(fifo_tx_data_val),
+     .rd_en(w_Tx_Done),
+     .dout(uart_tx_data_byte),
+     .full(),
+     .empty(w_Tx_fifo_empty)
+    );
+    
+    assign w_Tx_DV = ~w_tx_active & ~w_Tx_fifo_empty; 
+    */
+    
     uart_tx #(.CLKS_PER_BIT(c_CLKS_PER_BIT)) UART_TX_INST
     (.i_Clock(clk_100MHz),
-     .i_Rst(rst),
-     .i_Tx_DV(r_Tx_DV),
-     .i_Tx_Byte(uart_tx_data_byte), //r_Tx_Byte),
-     .o_Tx_Active(),
+     .i_Rst(reset),
+     .i_Tx_DV(fifo_tx_data_val), //w_Tx_DV),
+     .i_Tx_Byte(fifo_tx_data_in), //uart_tx_data_byte),
+     .o_Tx_Active(w_tx_active),
      .o_Tx_Serial(uart_tx),
      .o_Tx_Done(w_Tx_Done)
      );
-    */
+    
     
     // Instantiate inner design modules
     eightyHz_gen hz80(.clk_256kHz(pwm_master_clk_w), .reset(reset), .clk_80Hz_out(w_80Hz));
@@ -314,6 +429,7 @@ module top(
     //debug 
     .o_motor1SpdMod(motor1SpdMod_out_w),
     .o_motor2SpdMod(motor2SpdMod_out_w),
+    .o_pid_data_rdy(pid_data_rdy_w),
     //end debug
     .o_zero_encoders(zero_encoders_w),
     .o_sampleStateFlag(sampleCntOnOff_w),

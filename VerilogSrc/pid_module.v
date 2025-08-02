@@ -37,6 +37,7 @@ module pid_module #(parameter SIM = 0)
     //debug       
     output  [6:0] motor1SpdMod_out,
     output  [6:0] motor2SpdMod_out,
+    output        pid_data_rdy,
     //end debug
     output        zero_encoders,  //goes to encoder counters L&R
     output  [7:0] pid_out_setpt1,
@@ -46,16 +47,17 @@ module pid_module #(parameter SIM = 0)
     
     // Local Parameter (constant)
     //++++++++++++++++++++++++++++++++++++++++++++++++++++
-    localparam Ki  = 1;
-    localparam Ke  = 2;
-    localparam Kv  = 3;
+    localparam Ki  = 1; //5//3;
+    localparam Ke  = 2; //0;
+    localparam Kv  = 3; //2//1;
     //++++++++++++++++++++++++++++++++++++++++++++++++++++
     localparam SAMPLE_RUN_LOOPS = 10;  // Sample Time = 10 x clk_prescaler x 1/clk_freq = 1sec
     localparam SETPT_TO_TICS_PER_UNIT_TIME  = 3; // 3 tics/0.1sec/setpt
-    localparam MAX_SPEED = 127;
+    localparam MAX_SPEED = 70;
     localparam MIN_SETPT_ALLOWED = 48; // motors don't move well at lesser settings.
     localparam THRESHOLD_DXDT = 12; // make sure motor is moving
-    localparam DOMINANT_CNT_MAX = 9'h06;
+    localparam THRESHOLD_DV1V2 = 5;
+    localparam DOMINANT_CNT_MAX = 9'h09;
     
     // PID States
     localparam IDLE           = 3'b000;
@@ -67,7 +69,7 @@ module pid_module #(parameter SIM = 0)
     localparam CALCULATIONS_6 = 3'b110;
     localparam SET_NEW_SPDS   = 3'b111;
     
-    reg [2:0]  curr_state, next_state = IDLE;
+    reg [2:0] curr_state = IDLE;
     
     // Internal signals
     
@@ -122,6 +124,8 @@ module pid_module #(parameter SIM = 0)
     wire [23:0] feedback_cnt1_w;
     wire [23:0] feedback_cnt2_w;
     
+    reg   pid_data_rdy_r = 1'b0;
+    
     assign sampleFlag = sampleStateFlag_r;
     //assign zero_encoders = zero_encoders_r;
     
@@ -132,6 +136,8 @@ module pid_module #(parameter SIM = 0)
     
     assign feedback_cnt1_w = (SIM == 0) ? feedback_cnt1 : feedback_cnt1*10;
     assign feedback_cnt2_w = (SIM == 0) ? feedback_cnt2 : feedback_cnt2*10;
+    
+    assign pid_data_rdy = pid_data_rdy_r;
 
     always @(posedge clk or posedge rst) begin
     //$display("Clock trigered");
@@ -188,21 +194,12 @@ module pid_module #(parameter SIM = 0)
         end
     end
     
-    //StateMachine current state register/synchronization 
-    always@(posedge clk or posedge rst) begin
-        if(rst == 1'b1)
-           curr_state <= IDLE;
-        else
-           curr_state <= next_state;
-     end
-     
-     
     //PID logic
     always@(posedge clk or posedge rst) begin
         if(rst == 1'b1) begin
            dxdt_enc1     <= 24'sh000000;
            dxdt_enc2     <= 24'sh000000;
-           next_state    <= IDLE;
+           curr_state    <= IDLE;
            motor1SpdMod  <= 24'sh000000;
            motor2SpdMod  <= 24'sh000000;
            zero_encoders_r   <= 1'b0;
@@ -217,11 +214,13 @@ module pid_module #(parameter SIM = 0)
            dominant_motor1_count <= 8'h00; //8 bit counter
            dominant_motor_sample_count <= 9'h000; //9 bit counter
            dominant_motor_found <= 1'b0;
+           pid_data_rdy_r <= 1'b0;
         end
        else begin
        // Regular autonomous mode, PID Calc section
-       case(curr_state) 
+       case(curr_state)  
        IDLE: begin
+            pid_data_rdy_r <= 1'b0;
             if(pidCalcFlag && ~sampleModeEn) begin  // 100 ms pass?
                 if (setpt_in_rc_mod1[6:0] > 7'h00)begin
                    if(curr_pid_setpt1_r[6:0] < 7'h20) begin //low threshold for initial movement
@@ -238,13 +237,13 @@ module pid_module #(parameter SIM = 0)
                    prev_direction <= {wheel_dir_2,wheel_dir_1};
                    */
                    zero_encoders_r   <= 1'b0;
-                   next_state <= CALCULATIONS_1;
+                   curr_state <= CALCULATIONS_1;
                 end
                 else begin
                    pid_out_setpt1_r  <= 8'h00;
                    pid_out_setpt2_r  <= 8'h00;
                    zero_encoders_r   <= 1'b0;
-                   next_state <= IDLE;
+                   curr_state <= IDLE;
                 end
               end
             end
@@ -260,9 +259,9 @@ module pid_module #(parameter SIM = 0)
                    if (dominant_motor_sample_count == DOMINANT_CNT_MAX) begin  
                       dominant_motor_found <= 1'b1;
                       if (dominant_motor0_count > dominant_motor1_count)
-                         dominant_motor <= 1'b0;
+                         dominant_motor <= 1'b0; //m1 - L
                       else
-                         dominant_motor <= 1'b1;
+                         dominant_motor <= 1'b1; //m2 - R
                    end
                    else begin
                       if ((feedback_cnt1_w > feedback_cnt2_w) && (motor1SpdMod == 24'h000000)) begin
@@ -276,36 +275,36 @@ module pid_module #(parameter SIM = 0)
                       dominant_motor_sample_count <= dominant_motor_sample_count + 9'h001; //9 bit counter
                    end
                 end
-                next_state <= CALCULATIONS_2;
+                curr_state <= CALCULATIONS_2;
               end
          CALCULATIONS_2: begin
-                Ke_ek_12 <= (ek_12 >>> Ke); 
+                Ke_ek_12 <= (ek_12 >>> Ke); // + (ek_12 >>> (Ke+1)); 
                    
-                Ke_ek_21 <= (ek_21 >>> Ke); 
+                Ke_ek_21 <= (ek_21 >>> Ke); // + (ek_21 >>> (Ke+1)); 
                    
                 dx1dx2  <= dxdt_enc1 - dxdt_enc2;
                 dx2dx1  <= dxdt_enc2 - dxdt_enc1;
-                next_state  <=  CALCULATIONS_3;
+                curr_state  <=  CALCULATIONS_3;
               end
          CALCULATIONS_3: begin
-                Kvdx1dx2 <= dx1dx2 >>> Kv;
-                Kvdx2dx1 <= dx2dx1 >>> Kv;
-                next_state  <=  CALCULATIONS_4;
+                Kvdx1dx2 <= (dx1dx2 >>> Kv); // + (dx1dx2 >>> (Kv+1));
+                Kvdx2dx1 <= (dx2dx1 >>> Kv); // + (dx2dx1 >>> (Kv+1));
+                curr_state  <=  CALCULATIONS_4;
               end
          CALCULATIONS_4: begin 
                 if (dominant_motor == 1'b0) begin
-                   motor2SpdMod <= Kvdx1dx2 + Ke_ek_12; 
+                   motor2SpdMod <= Kvdx1dx2 + Ke_ek_12 + prevMotor2SpdMod_Ki; 
                    motor1SpdMod <= 0;
                 end
                 else if (dominant_motor == 1'b1) begin
-                   motor1SpdMod <= Kvdx2dx1 + Ke_ek_21; 
+                   motor1SpdMod <= Kvdx2dx1 + Ke_ek_21 + prevMotor1SpdMod_Ki; 
                    motor2SpdMod <= 0;
                 end
                 else begin 
                    motor1SpdMod <= 0;
                    motor2SpdMod <= 0;
                 end
-                
+            
                 //check for any motor not moving, lead or not
                 if (dxdt_enc2 < THRESHOLD_DXDT) begin //check for motor not moving
                    motor2SpdMod <= 0; 
@@ -315,44 +314,56 @@ module pid_module #(parameter SIM = 0)
                       motor2SpdMod <= 10; 
                       motor1SpdMod <= 0;
                 end
-             
-                next_state  <=  CALCULATIONS_5;
+            
+                curr_state  <=  CALCULATIONS_5; //PZ checking to see how adjusts in 5 play a roll 
              end
-         CALCULATIONS_5: begin
-                prev_encdr_cnt1 <= feedback_cnt1_w;
-                prev_encdr_cnt2 <= feedback_cnt2_w;  
+         CALCULATIONS_5: begin 
+                //overshoot ceiling 
                 //check for reset needed for encoder counters winding up for whatever reason
-                if (motor1SpdMod[6:0] > 7'h15) begin 
+                if (motor1SpdMod[6:0] > 45) begin 
                    //zero_encoders_r   <= 1'b1;
-                   motor1SpdMod <= 10;
+                   motor1SpdMod <= 45;
                 end
-                else if (motor2SpdMod > 7'h15) begin 
+                else if (motor2SpdMod > 45)  begin 
                    //zero_encoders_r   <= 1'b1;
-                   motor2SpdMod <= 10;
+                   motor2SpdMod <= 45;
                 end
-                else if (prevMotor1SpdMod_Ki[6:0] > 10)
-                   prevMotor1SpdMod_Ki[6:0] <= 5;
-                else if (prevMotor2SpdMod_Ki[6:0] > 10)
-                   prevMotor2SpdMod_Ki[6:0] <= 5;
-                   
-                next_state  <=  CALCULATIONS_6;
+               
+                curr_state  <=  CALCULATIONS_6;
              end
          CALCULATIONS_6: begin
-                  //integration by using previous pid_out_setpt1/2_r
-                  control_signal1 <= pid_out_setpt1_r[6:0] + motor1SpdMod[6:0] + prevMotor1SpdMod_Ki[6:0]; //derivative1 + integral1
-                  control_signal2 <= pid_out_setpt2_r[6:0] + motor2SpdMod[6:0] + prevMotor2SpdMod_Ki[6:0]; //derivative2 + integral2
-                  prevMotor1SpdMod_Ki <= motor1SpdMod >>> Ki;
-                  prevMotor2SpdMod_Ki <= motor2SpdMod >>> Ki;
-                  next_state  <=  SET_NEW_SPDS; //CALCULATIONS_5;
-                end
+                prev_encdr_cnt1 <= feedback_cnt1_w;
+                prev_encdr_cnt2 <= feedback_cnt2_w; 
+                //integration by using previous pid_out_setpt1/2_r
+                control_signal1 <= pid_out_setpt1_r[6:0] + motor1SpdMod[6:0]; //derivative1 + integral1
+                control_signal2 <= pid_out_setpt2_r[6:0] + motor2SpdMod[6:0]; //derivative2 + integral2
+                prevMotor1SpdMod_Ki <= motor1SpdMod >>> Ki;
+                prevMotor2SpdMod_Ki <= motor2SpdMod >>> Ki;
+                curr_state  <=  SET_NEW_SPDS; //CALCULATIONS_5;
+              end
         
-         SET_NEW_SPDS: begin  //Add appropriate wheel direction. Check for max or above max settings.
+         SET_NEW_SPDS: begin  //Add appropriate wheel direction. 
+                //Undershoot railing
+                if (control_signal1 < setpt_in_rc_mod1[6:0]) begin
+                   curr_pid_setpt1_r <= {wheel_dir_1, setpt_in_rc_mod1[6:0]};
+                   pid_out_setpt1_r  <= {wheel_dir_1, setpt_in_rc_mod1[6:0]};
+                end     
+                else begin
                    curr_pid_setpt1_r <= {wheel_dir_1, control_signal1};
                    curr_pid_setpt2_r <= {wheel_dir_2, control_signal2}; 
+                end
+                
+                if (control_signal2 < setpt_in_rc_mod2[6:0]) begin
+                   curr_pid_setpt2_r <= {wheel_dir_2, setpt_in_rc_mod2[6:0]};
+                   pid_out_setpt2_r  <= {wheel_dir_2, setpt_in_rc_mod2[6:0]};
+                end  
+                else begin
                    pid_out_setpt1_r <=  {wheel_dir_1, control_signal1};
                    pid_out_setpt2_r <=  {wheel_dir_2, control_signal2};
-                   next_state  <= IDLE;
                 end
+                   pid_data_rdy_r <= 1'b1;
+                   curr_state  <= IDLE;
+              end
        endcase
      end
   end

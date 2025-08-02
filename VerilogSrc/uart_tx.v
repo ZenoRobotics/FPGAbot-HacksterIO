@@ -56,12 +56,13 @@ module uart_tx
         s_IDLE :
           begin
             o_Tx_Serial   <= 1'b1;         // Drive Line High for Idle
-            r_Tx_Done     <= 1'b0;
+            r_Tx_Done     <= 1'b1;         // let's keep it done for slower clocks to see
             r_Clock_Count <= 0;
             r_Bit_Index   <= 0;
              
             if (i_Tx_DV == 1'b1)
               begin
+                r_Tx_Done   <= 1'b0;
                 r_Tx_Active <= 1'b1;
                 r_Tx_Data   <= i_Tx_Byte;
                 r_SM_Main   <= s_TX_START_BIT;

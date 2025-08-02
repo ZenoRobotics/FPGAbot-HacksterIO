@@ -40,6 +40,7 @@ module motor_cntlr #(parameter SIM = 0)
    // debug
    output  [6:0] o_motor1SpdMod,
    output  [6:0] o_motor2SpdMod,
+   output        o_pid_data_rdy,
    // end debug
    output        o_zero_encoders,
    // To L298N Motor Driver
@@ -56,7 +57,7 @@ module motor_cntlr #(parameter SIM = 0)
    wire  [7:0] pid_out_setptL_w;
    wire  [7:0] pid_out_setptR_w;
    
-   assign SAMPLE_CYCLE_CLK_PRESCALER = (SIM == 0) ? 16'h0640 : 16'h0640; 
+   assign SAMPLE_CYCLE_CLK_PRESCALER = (SIM == 0) ? 16'h1900 : 16'h0640; //1900
    
    pwm_module pwm_motor_lft_inst(
     .clk_256k(i_Clock),      // divided by 128 = pwm freq of 2kHz
@@ -91,6 +92,7 @@ module motor_cntlr #(parameter SIM = 0)
      //debug
      .motor1SpdMod_out(o_motor1SpdMod),
      .motor2SpdMod_out(o_motor2SpdMod),
+     .pid_data_rdy(o_pid_data_rdy),
      //end debug
      .zero_encoders(o_zero_encoders),
      .pid_out_setpt1(pid_out_setptL_w),     //fed to pwm_module then out to motor

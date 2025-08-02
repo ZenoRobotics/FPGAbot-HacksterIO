@@ -26,7 +26,7 @@ module clk_gen_256khz(
     output clk_256khz_out
     );
     
-   reg  [4:0] clk_256khz_out_r;
+   reg  [4:0] clk_256khz_out_r = 5'b00000;
    
    always @(posedge clk_8_192_MHz or posedge reset)
 		if(reset)
